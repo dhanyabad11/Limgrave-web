@@ -436,13 +436,20 @@ function VideoMeetComponent() {
                 console.log("   - All clients:", clients);
                 console.log("   - Usernames Map:", usernamesMap);
 
-                clients.forEach((socketListId) => {
-                    // Skip our own socket ID
-                    if (socketListId === socketIdRef.current) {
-                        console.log("Skipping own socket ID:", socketListId);
-                        return;
-                    }
+                // Determine which socket IDs to connect to
+                let socketListToProcess = [];
+                
+                if (id === socketIdRef.current) {
+                    // This is OUR join event - connect to all EXISTING users (everyone except us)
+                    console.log("⚠️  This is our own join event - connecting to existing users");
+                    socketListToProcess = clients.filter(socketId => socketId !== socketIdRef.current);
+                } else {
+                    // Another user joined - only connect to THAT user
+                    console.log("➕ Another user joined - creating connection to:", id);
+                    socketListToProcess = [id];
+                }
 
+                socketListToProcess.forEach((socketListId) => {
                     // Skip if connection already exists
                     if (connections[socketListId]) {
                         console.log("Connection already exists for", socketListId);
