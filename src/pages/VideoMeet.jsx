@@ -54,6 +54,7 @@ function VideoMeetComponent() {
     let [copySuccess, setCopySuccess] = useState(false);
 
     const videoRef = useRef([]);
+    const addedVideoSocketIds = useRef(new Set()); // Track which socket IDs have been added to videos
     let [videos, setVideos] = useState([]);
 
     // Cleanup on unmount
@@ -428,6 +429,9 @@ function VideoMeetComponent() {
 
             socketRef.current.on("user-left", (id) => {
                 setVideos((videos) => videos.filter((video) => video.socketId !== id));
+                // Also remove from the tracking Set
+                addedVideoSocketIds.current.delete(id);
+                console.log("User left:", id, "- Removed from videos and tracking set");
             });
 
             socketRef.current.on("user-joined", (id, clients, usernamesMap) => {
@@ -516,6 +520,12 @@ function VideoMeetComponent() {
                         // Use the first stream
                         const remoteStream = event.streams[0];
 
+                        // Check if we've already added this socket ID to prevent duplicates from multiple tracks
+                        if (addedVideoSocketIds.current.has(socketListId)) {
+                            console.log("   - ALREADY ADDED - Skipping duplicate track");
+                            return;
+                        }
+
                         let videoExists = videoRef.current.find(
                             (video) => video.socketId === socketListId
                         );
@@ -546,6 +556,9 @@ function VideoMeetComponent() {
                                 console.error("⛔ CRITICAL: Attempted to add own socket to videos!");
                                 return;
                             }
+                            
+                            // Mark this socket ID as added BEFORE creating the video
+                            addedVideoSocketIds.current.add(socketListId);
                             
                             let newVideo = {
                                 socketId: socketListId,
