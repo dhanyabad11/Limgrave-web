@@ -24,7 +24,11 @@ var connections = {};
 var iceCandidateQueue = {}; // Queue for ICE candidates received before remote description
 
 const peerConfigConnections = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" }
+    ],
 };
 
 function VideoMeetComponent() {
@@ -436,14 +440,26 @@ function VideoMeetComponent() {
                     console.log("Creating new peer connection for:", socketListId);
                     connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
 
+                    // Monitor connection state
+                    connections[socketListId].onconnectionstatechange = () => {
+                        console.log(`Connection state for ${socketListId}:`, connections[socketListId].connectionState);
+                    };
+
+                    connections[socketListId].oniceconnectionstatechange = () => {
+                        console.log(`ICE connection state for ${socketListId}:`, connections[socketListId].iceConnectionState);
+                    };
+
                     // Wait for their ice candidate
                     connections[socketListId].onicecandidate = function (event) {
                         if (event.candidate != null) {
+                            console.log("Sending ICE candidate to:", socketListId);
                             socketRef.current.emit(
                                 "signal",
                                 socketListId,
                                 JSON.stringify({ ice: event.candidate })
                             );
+                        } else {
+                            console.log("All ICE candidates sent for:", socketListId);
                         }
                     };
 
