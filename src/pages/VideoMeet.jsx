@@ -433,8 +433,10 @@ function VideoMeetComponent() {
             socketRef.current.on("user-joined", (id, clients, usernamesMap) => {
                 console.log("👥 User joined event received");
                 console.log("   - Joined ID:", id);
+                console.log("   - My Socket ID:", socketIdRef.current);
                 console.log("   - All clients:", clients);
                 console.log("   - Usernames Map:", usernamesMap);
+                console.log("   - Current connections:", Object.keys(connections));
 
                 // Determine which socket IDs to connect to
                 let socketListToProcess = [];
@@ -448,6 +450,8 @@ function VideoMeetComponent() {
                     console.log("➕ Another user joined - creating connection to:", id);
                     socketListToProcess = [id];
                 }
+
+                console.log("   - Socket list to process:", socketListToProcess);
 
                 socketListToProcess.forEach((socketListId) => {
                     // Skip if connection already exists
@@ -495,6 +499,12 @@ function VideoMeetComponent() {
                         console.log("   - Streams:", event.streams);
                         console.log("   - Usernames Map received:", usernamesMap);
 
+                        // CRITICAL: Never add our own socket ID to videos
+                        if (socketListId === socketIdRef.current) {
+                            console.log("⚠️  SKIPPING: This is our own stream!");
+                            return;
+                        }
+
                         // SAFE: Get username with multiple fallbacks
                         let participantUsername = "Participant";
                         if (usernamesMap && typeof usernamesMap === "object") {
@@ -530,6 +540,13 @@ function VideoMeetComponent() {
                                 "   - CREATING NEW VIDEO with username:",
                                 participantUsername
                             );
+                            
+                            // Double-check: Never add our own socket to videos
+                            if (socketListId === socketIdRef.current) {
+                                console.error("⛔ CRITICAL: Attempted to add own socket to videos!");
+                                return;
+                            }
+                            
                             let newVideo = {
                                 socketId: socketListId,
                                 stream: remoteStream,
