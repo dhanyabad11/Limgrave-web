@@ -21,6 +21,7 @@ import server from "../environment";
 const server_url = server;
 
 var connections = {};
+var iceCandidateQueue = {}; // Queue for ICE candidates received before remote description
 
 const peerConfigConnections = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -329,6 +330,17 @@ function VideoMeetComponent() {
                 connections[fromId]
                     .setRemoteDescription(new RTCSessionDescription(signal.sdp))
                     .then(() => {
+                        // Process any queued ICE candidates
+                        if (iceCandidateQueue[fromId]) {
+                            console.log(`Processing ${iceCandidateQueue[fromId].length} queued ICE candidates for ${fromId}`);
+                            iceCandidateQueue[fromId].forEach((candidate) => {
+                                connections[fromId]
+                                    .addIceCandidate(new RTCIceCandidate(candidate))
+                                    .catch((e) => console.error("Error adding queued ICE candidate:", e));
+                            });
+                            iceCandidateQueue[fromId] = [];
+                        }
+                        
                         if (signal.sdp.type === "offer") {
                             connections[fromId]
                                 .createAnswer()
@@ -355,13 +367,18 @@ function VideoMeetComponent() {
             }
 
             if (signal.ice) {
-                // Only add ICE candidate if remote description is set
+                // Check if remote description is set
                 if (connections[fromId] && connections[fromId].remoteDescription) {
                     connections[fromId]
                         .addIceCandidate(new RTCIceCandidate(signal.ice))
                         .catch((e) => console.error("Error adding ICE candidate:", e));
                 } else {
-                    console.warn("Remote description not set yet, queuing ICE candidate");
+                    // Queue ICE candidate until remote description is set
+                    console.log("Queuing ICE candidate for", fromId);
+                    if (!iceCandidateQueue[fromId]) {
+                        iceCandidateQueue[fromId] = [];
+                    }
+                    iceCandidateQueue[fromId].push(signal.ice);
                 }
             }
         }
@@ -391,12 +408,19 @@ function VideoMeetComponent() {
                 console.log("   - Usernames Map:", usernamesMap);
 
                 clients.forEach((socketListId) => {
+                    // Skip our own socket ID
+                    if (socketListId === socketIdRef.current) {
+                        console.log("Skipping own socket ID:", socketListId);
+                        return;
+                    }
+                    
                     // Skip if connection already exists
                     if (connections[socketListId]) {
                         console.log("Connection already exists for", socketListId);
                         return;
                     }
 
+                    console.log("Creating new peer connection for:", socketListId);
                     connections[socketListId] = new RTCPeerConnection(peerConfigConnections);
 
                     // Wait for their ice candidate
