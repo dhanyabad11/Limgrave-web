@@ -117,22 +117,47 @@ function VideoMeetComponent() {
 
     const getPermissions = async () => {
         try {
-            const videoPermission = await navigator.mediaDevices.getUserMedia({ video: true });
-            if (videoPermission) {
-                setVideoAvailable(true);
-                console.log("Video permission granted");
-            } else {
+            // Mobile-friendly constraints
+            const videoConstraints = {
+                video: {
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    facingMode: "user" // Use front camera on mobile
+                }
+            };
+
+            const audioConstraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            };
+
+            // Try to get video permission
+            try {
+                const videoPermission = await navigator.mediaDevices.getUserMedia(videoConstraints);
+                if (videoPermission) {
+                    setVideoAvailable(true);
+                    console.log("Video permission granted");
+                    videoPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
+                }
+            } catch (videoError) {
                 setVideoAvailable(false);
-                console.log("Video permission denied");
+                console.log("Video permission denied or not available:", videoError);
             }
 
-            const audioPermission = await navigator.mediaDevices.getUserMedia({ audio: true });
-            if (audioPermission) {
-                setAudioAvailable(true);
-                console.log("Audio permission granted");
-            } else {
+            // Try to get audio permission
+            try {
+                const audioPermission = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                if (audioPermission) {
+                    setAudioAvailable(true);
+                    console.log("Audio permission granted");
+                    audioPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
+                }
+            } catch (audioError) {
                 setAudioAvailable(false);
-                console.log("Audio permission denied");
+                console.log("Audio permission denied or not available:", audioError);
             }
 
             if (navigator.mediaDevices.getDisplayMedia) {
@@ -251,11 +276,30 @@ function VideoMeetComponent() {
 
     const getUserMedia = () => {
         if ((video && videoAvailable) || (audio && audioAvailable)) {
+            // Mobile-friendly media constraints
+            const constraints = {
+                video: video && videoAvailable ? {
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 },
+                    facingMode: "user"
+                } : false,
+                audio: audio && audioAvailable ? {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } : false
+            };
+
+            console.log("Getting user media with constraints:", constraints);
+            
             navigator.mediaDevices
-                .getUserMedia({ video: video, audio: audio })
+                .getUserMedia(constraints)
                 .then(getUserMediaSuccess)
                 .then((stream) => {})
-                .catch((e) => console.log(e));
+                .catch((e) => {
+                    console.error("getUserMedia error:", e);
+                    alert("Failed to access camera/microphone. Please check permissions.");
+                });
         } else {
             try {
                 let tracks = localVideoref.current.srcObject.getTracks();
@@ -890,6 +934,7 @@ function VideoMeetComponent() {
                             }}
                             autoPlay
                             playsInline
+                            muted={false}
                         />
                         <div className={styles.videoNameLabel}>
                             {video.username || "Participant"}
