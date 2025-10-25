@@ -184,7 +184,10 @@ function VideoMeetComponent() {
         for (let id in connections) {
             if (id === socketIdRef.current) continue;
 
-            connections[id].addStream(window.localStream);
+            // Use modern addTrack API
+            stream.getTracks().forEach((track) => {
+                connections[id].addTrack(track, stream);
+            });
 
             connections[id].createOffer().then((description) => {
                 console.log(description);
@@ -219,7 +222,10 @@ function VideoMeetComponent() {
                     localVideoref.current.srcObject = window.localStream;
 
                     for (let id in connections) {
-                        connections[id].addStream(window.localStream);
+                        // Use modern addTrack API
+                        window.localStream.getTracks().forEach((track) => {
+                            connections[id].addTrack(track, window.localStream);
+                        });
 
                         connections[id].createOffer().then((description) => {
                             connections[id]
@@ -285,7 +291,10 @@ function VideoMeetComponent() {
         for (let id in connections) {
             if (id === socketIdRef.current) continue;
 
-            connections[id].addStream(window.localStream);
+            // Use modern addTrack API
+            stream.getTracks().forEach((track) => {
+                connections[id].addTrack(track, stream);
+            });
 
             connections[id].createOffer().then((description) => {
                 connections[id]
@@ -332,15 +341,19 @@ function VideoMeetComponent() {
                     .then(() => {
                         // Process any queued ICE candidates
                         if (iceCandidateQueue[fromId]) {
-                            console.log(`Processing ${iceCandidateQueue[fromId].length} queued ICE candidates for ${fromId}`);
+                            console.log(
+                                `Processing ${iceCandidateQueue[fromId].length} queued ICE candidates for ${fromId}`
+                            );
                             iceCandidateQueue[fromId].forEach((candidate) => {
                                 connections[fromId]
                                     .addIceCandidate(new RTCIceCandidate(candidate))
-                                    .catch((e) => console.error("Error adding queued ICE candidate:", e));
+                                    .catch((e) =>
+                                        console.error("Error adding queued ICE candidate:", e)
+                                    );
                             });
                             iceCandidateQueue[fromId] = [];
                         }
-                        
+
                         if (signal.sdp.type === "offer") {
                             connections[fromId]
                                 .createAnswer()
@@ -413,7 +426,7 @@ function VideoMeetComponent() {
                         console.log("Skipping own socket ID:", socketListId);
                         return;
                     }
-                    
+
                     // Skip if connection already exists
                     if (connections[socketListId]) {
                         console.log("Connection already exists for", socketListId);
@@ -434,20 +447,23 @@ function VideoMeetComponent() {
                         }
                     };
 
-                    // Wait for their video stream
-                    connections[socketListId].onaddstream = (event) => {
-                        console.log("📹 Stream received from:", socketListId);
+                    // MODERN API: Use ontrack instead of deprecated onaddstream
+                    connections[socketListId].ontrack = (event) => {
+                        console.log("📹 Track received from:", socketListId);
+                        console.log("   - Track kind:", event.track.kind);
+                        console.log("   - Streams:", event.streams);
                         console.log("   - Usernames Map received:", usernamesMap);
-                        console.log("   - Type of usernamesMap:", typeof usernamesMap);
 
                         // SAFE: Get username with multiple fallbacks
-                        let participantUsername = "Participant"; // Default
-                        
-                        if (usernamesMap && typeof usernamesMap === 'object') {
+                        let participantUsername = "Participant";
+                        if (usernamesMap && typeof usernamesMap === "object") {
                             participantUsername = usernamesMap[socketListId] || "Participant";
                         }
-                        
+
                         console.log("   - Final display name:", participantUsername);
+
+                        // Use the first stream
+                        const remoteStream = event.streams[0];
 
                         let videoExists = videoRef.current.find(
                             (video) => video.socketId === socketListId
@@ -455,14 +471,12 @@ function VideoMeetComponent() {
 
                         if (videoExists) {
                             console.log("   - FOUND EXISTING - Updating stream");
-
-                            // Update the stream of the existing video
                             setVideos((videos) => {
                                 const updatedVideos = videos.map((video) =>
                                     video.socketId === socketListId
                                         ? {
                                               ...video,
-                                              stream: event.stream,
+                                              stream: remoteStream,
                                               username: participantUsername,
                                           }
                                         : video
@@ -475,10 +489,9 @@ function VideoMeetComponent() {
                                 "   - CREATING NEW VIDEO with username:",
                                 participantUsername
                             );
-                            // Create a new video
                             let newVideo = {
                                 socketId: socketListId,
-                                stream: event.stream,
+                                stream: remoteStream,
                                 autoplay: true,
                                 playsinline: true,
                                 username: participantUsername,
@@ -493,10 +506,14 @@ function VideoMeetComponent() {
                         }
                     };
 
-                    // Add the local video stream
+                    // Add the local video stream using modern API
                     if (window.localStream !== undefined && window.localStream !== null) {
                         try {
-                            connections[socketListId].addStream(window.localStream);
+                            // Add each track individually (modern API)
+                            window.localStream.getTracks().forEach((track) => {
+                                console.log("Adding track to peer:", track.kind, socketListId);
+                                connections[socketListId].addTrack(track, window.localStream);
+                            });
                         } catch (e) {
                             console.error("Error adding stream:", e);
                         }
@@ -505,7 +522,9 @@ function VideoMeetComponent() {
                             new MediaStream([black(...args), silence()]);
                         window.localStream = blackSilence();
                         try {
-                            connections[socketListId].addStream(window.localStream);
+                            window.localStream.getTracks().forEach((track) => {
+                                connections[socketListId].addTrack(track, window.localStream);
+                            });
                         } catch (e) {
                             console.error("Error adding black silence stream:", e);
                         }
@@ -519,7 +538,14 @@ function VideoMeetComponent() {
 
                         try {
                             if (window.localStream) {
-                                connections[id2].addStream(window.localStream);
+                                // Add tracks using modern API
+                                window.localStream.getTracks().forEach((track) => {
+                                    const senders = connections[id2].getSenders();
+                                    const alreadyAdded = senders.find((s) => s.track === track);
+                                    if (!alreadyAdded) {
+                                        connections[id2].addTrack(track, window.localStream);
+                                    }
+                                });
                             }
                         } catch (e) {
                             console.error("Error adding stream to peer:", e);
