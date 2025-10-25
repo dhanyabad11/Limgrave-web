@@ -27,7 +27,7 @@ const peerConfigConnections = {
     iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" }
+        { urls: "stun:stun2.l.google.com:19302" },
     ],
 };
 
@@ -402,6 +402,18 @@ function VideoMeetComponent() {
     };
 
     const connectToSocketServer = () => {
+        // Prevent duplicate connections
+        if (socketRef.current && socketRef.current.connected) {
+            console.log("Socket already connected, skipping...");
+            return;
+        }
+
+        // Disconnect any existing socket first
+        if (socketRef.current) {
+            socketRef.current.off(); // Remove all listeners
+            socketRef.current.disconnect();
+        }
+
         socketRef.current = io.connect(server_url, { secure: false });
 
         socketRef.current.on("signal", gotMessageFromServer);
@@ -442,11 +454,17 @@ function VideoMeetComponent() {
 
                     // Monitor connection state
                     connections[socketListId].onconnectionstatechange = () => {
-                        console.log(`Connection state for ${socketListId}:`, connections[socketListId].connectionState);
+                        console.log(
+                            `Connection state for ${socketListId}:`,
+                            connections[socketListId].connectionState
+                        );
                     };
 
                     connections[socketListId].oniceconnectionstatechange = () => {
-                        console.log(`ICE connection state for ${socketListId}:`, connections[socketListId].iceConnectionState);
+                        console.log(
+                            `ICE connection state for ${socketListId}:`,
+                            connections[socketListId].iceConnectionState
+                        );
                     };
 
                     // Wait for their ice candidate
