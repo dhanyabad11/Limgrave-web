@@ -4,6 +4,42 @@
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     overflow: hidden;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    transition: background 0.3s ease;
+}
+
+/* Dark Mode */
+.meetVideoContainer.darkMode {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+/* Light Mode */
+.meetVideoContainer.lightMode {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+/* Dark Mode Toggle Button */
+.darkModeToggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.darkModeToggle:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(180deg);
 }
 
 /* Meeting Header */
@@ -21,6 +57,12 @@
     padding: 0 30px;
     z-index: 25;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background 0.3s ease;
+}
+
+.lightMode .meetingHeader {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .meetingInfo h3 {
@@ -30,10 +72,18 @@
     font-weight: 600;
 }
 
+.lightMode .meetingInfo h3 {
+    color: #1a1a2e;
+}
+
 .meetingInfo p {
     color: #b3b3b3;
     margin: 5px 0 0 0;
     font-size: 14px;
+}
+
+.lightMode .meetingInfo p {
+    color: #666;
 }
 
 .copyButton {
@@ -203,6 +253,12 @@
     transition: all 0.3s ease;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.lightMode .videoContainer {
+    background: #ffffff;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
 .videoContainer:hover {

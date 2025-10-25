@@ -13,6 +13,8 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ChatIcon from "@mui/icons-material/Chat";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
+import Brightness4Icon from "@mui/icons-material/Brightness4";
+import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { AuthContext } from "../contexts/AuthContext";
 import { useNavigate, useParams } from "react-router-dom";
 import withAuth from "../utils/withAuth";
@@ -52,6 +54,7 @@ function VideoMeetComponent() {
     let [username, setUsername] = useState("");
     let [isConnected, setIsConnected] = useState(false);
     let [copySuccess, setCopySuccess] = useState(false);
+    let [darkMode, setDarkMode] = useState(true); // Dark mode state
 
     const videoRef = useRef([]);
     const addedVideoSocketIds = useRef(new Set()); // Track which socket IDs have been added to videos
@@ -122,16 +125,16 @@ function VideoMeetComponent() {
                 video: {
                     width: { ideal: 1280, max: 1920 },
                     height: { ideal: 720, max: 1080 },
-                    facingMode: "user" // Use front camera on mobile
-                }
+                    facingMode: "user", // Use front camera on mobile
+                },
             };
 
             const audioConstraints = {
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
-                    autoGainControl: true
-                }
+                    autoGainControl: true,
+                },
             };
 
             // Try to get video permission
@@ -140,7 +143,7 @@ function VideoMeetComponent() {
                 if (videoPermission) {
                     setVideoAvailable(true);
                     console.log("Video permission granted");
-                    videoPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
+                    videoPermission.getTracks().forEach((track) => track.stop()); // Stop the test stream
                 }
             } catch (videoError) {
                 setVideoAvailable(false);
@@ -153,7 +156,7 @@ function VideoMeetComponent() {
                 if (audioPermission) {
                     setAudioAvailable(true);
                     console.log("Audio permission granted");
-                    audioPermission.getTracks().forEach(track => track.stop()); // Stop the test stream
+                    audioPermission.getTracks().forEach((track) => track.stop()); // Stop the test stream
                 }
             } catch (audioError) {
                 setAudioAvailable(false);
@@ -278,20 +281,26 @@ function VideoMeetComponent() {
         if ((video && videoAvailable) || (audio && audioAvailable)) {
             // Mobile-friendly media constraints
             const constraints = {
-                video: video && videoAvailable ? {
-                    width: { ideal: 1280, max: 1920 },
-                    height: { ideal: 720, max: 1080 },
-                    facingMode: "user"
-                } : false,
-                audio: audio && audioAvailable ? {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                } : false
+                video:
+                    video && videoAvailable
+                        ? {
+                              width: { ideal: 1280, max: 1920 },
+                              height: { ideal: 720, max: 1080 },
+                              facingMode: "user",
+                          }
+                        : false,
+                audio:
+                    audio && audioAvailable
+                        ? {
+                              echoCancellation: true,
+                              noiseSuppression: true,
+                              autoGainControl: true,
+                          }
+                        : false,
             };
 
             console.log("Getting user media with constraints:", constraints);
-            
+
             navigator.mediaDevices
                 .getUserMedia(constraints)
                 .then(getUserMediaSuccess)
@@ -488,11 +497,13 @@ function VideoMeetComponent() {
 
                 // Determine which socket IDs to connect to
                 let socketListToProcess = [];
-                
+
                 if (id === socketIdRef.current) {
                     // This is OUR join event - connect to all EXISTING users (everyone except us)
                     console.log("⚠️  This is our own join event - connecting to existing users");
-                    socketListToProcess = clients.filter(socketId => socketId !== socketIdRef.current);
+                    socketListToProcess = clients.filter(
+                        (socketId) => socketId !== socketIdRef.current
+                    );
                 } else {
                     // Another user joined - only connect to THAT user
                     console.log("➕ Another user joined - creating connection to:", id);
@@ -594,16 +605,18 @@ function VideoMeetComponent() {
                                 "   - CREATING NEW VIDEO with username:",
                                 participantUsername
                             );
-                            
+
                             // Double-check: Never add our own socket to videos
                             if (socketListId === socketIdRef.current) {
-                                console.error("⛔ CRITICAL: Attempted to add own socket to videos!");
+                                console.error(
+                                    "⛔ CRITICAL: Attempted to add own socket to videos!"
+                                );
                                 return;
                             }
-                            
+
                             // Mark this socket ID as added BEFORE creating the video
                             addedVideoSocketIds.current.add(socketListId);
-                            
+
                             let newVideo = {
                                 socketId: socketListId,
                                 stream: remoteStream,
@@ -796,7 +809,16 @@ function VideoMeetComponent() {
     };
 
     return (
-        <div className={styles.meetVideoContainer}>
+        <div className={`${styles.meetVideoContainer} ${darkMode ? styles.darkMode : styles.lightMode}`}>
+            {/* Dark Mode Toggle */}
+            <button
+                className={styles.darkModeToggle}
+                onClick={() => setDarkMode(!darkMode)}
+                title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+                {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
+            </button>
+
             {/* Meeting Info Header */}
             <div className={styles.meetingHeader}>
                 <div className={styles.meetingInfo}>
