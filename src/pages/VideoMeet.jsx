@@ -27,10 +27,30 @@ var iceCandidateQueue = {}; // Queue for ICE candidates received before remote d
 
 const peerConfigConnections = {
     iceServers: [
+        // Google's public STUN servers
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
         { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        // OpenRelay free TURN server
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
     ],
+    iceCandidatePoolSize: 10,
 };
 
 function VideoMeetComponent() {
@@ -206,7 +226,9 @@ function VideoMeetComponent() {
 
     const getUserMediaSuccess = (stream) => {
         try {
-            window.localStream.getTracks().forEach((track) => track.stop());
+            if (window.localStream) {
+                window.localStream.getTracks().forEach((track) => track.stop());
+            }
         } catch (e) {
             console.log(e);
         }
@@ -214,11 +236,18 @@ function VideoMeetComponent() {
         window.localStream = stream;
         localVideoref.current.srcObject = stream;
 
+        console.log("✅ Local stream ready:");
+        console.log("   - Video tracks:", stream.getVideoTracks().length);
+        console.log("   - Audio tracks:", stream.getAudioTracks().length);
+
         for (let id in connections) {
             if (id === socketIdRef.current) continue;
 
+            console.log("🔄 Adding local tracks to peer:", id);
+
             // Use modern addTrack API
             stream.getTracks().forEach((track) => {
+                console.log(`   - Adding ${track.kind} track to ${id}`);
                 connections[id].addTrack(track, stream);
             });
 
@@ -524,30 +553,50 @@ function VideoMeetComponent() {
 
                     // Monitor connection state
                     connections[socketListId].onconnectionstatechange = () => {
-                        console.log(
-                            `Connection state for ${socketListId}:`,
-                            connections[socketListId].connectionState
-                        );
+                        const state = connections[socketListId].connectionState;
+                        console.log(`Connection state for ${socketListId}:`, state);
+                        
+                        if (state === "failed" || state === "disconnected" || state === "closed") {
+                            console.error(`❌ Connection ${state} for ${socketListId}`);
+                        }
+                        if (state === "connected") {
+                            console.log(`✅ Successfully connected to ${socketListId}`);
+                        }
                     };
 
                     connections[socketListId].oniceconnectionstatechange = () => {
+                        const iceState = connections[socketListId].iceConnectionState;
+                        console.log(`ICE connection state for ${socketListId}:`, iceState);
+                        
+                        if (iceState === "failed") {
+                            console.error(`❌ ICE connection failed for ${socketListId} - Check firewall/TURN servers`);
+                        }
+                        if (iceState === "connected" || iceState === "completed") {
+                            console.log(`✅ ICE connection established for ${socketListId}`);
+                        }
+                    };
+
+                    // ICE gathering state
+                    connections[socketListId].onicegatheringstatechange = () => {
                         console.log(
-                            `ICE connection state for ${socketListId}:`,
-                            connections[socketListId].iceConnectionState
+                            `ICE gathering state for ${socketListId}:`,
+                            connections[socketListId].iceGatheringState
                         );
                     };
 
                     // Wait for their ice candidate
                     connections[socketListId].onicecandidate = function (event) {
                         if (event.candidate != null) {
-                            console.log("Sending ICE candidate to:", socketListId);
+                            console.log("📤 Sending ICE candidate to:", socketListId);
+                            console.log("   - Type:", event.candidate.type);
+                            console.log("   - Protocol:", event.candidate.protocol);
                             socketRef.current.emit(
                                 "signal",
                                 socketListId,
                                 JSON.stringify({ ice: event.candidate })
                             );
                         } else {
-                            console.log("All ICE candidates sent for:", socketListId);
+                            console.log("✅ All ICE candidates sent for:", socketListId);
                         }
                     };
 
