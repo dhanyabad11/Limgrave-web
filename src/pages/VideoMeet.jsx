@@ -419,13 +419,24 @@ function VideoMeetComponent() {
     };
 
     const gotMessageFromServer = (fromId, message) => {
+        console.log("📩 Signal received from:", fromId);
         var signal = JSON.parse(message);
+        console.log("   - Signal type:", signal.sdp ? signal.sdp.type : "ICE candidate");
 
         if (fromId !== socketIdRef.current) {
             if (signal.sdp) {
+                console.log("📝 Processing SDP", signal.sdp.type, "from", fromId);
+                
+                if (!connections[fromId]) {
+                    console.error("❌ No connection exists for", fromId);
+                    return;
+                }
+                
                 connections[fromId]
                     .setRemoteDescription(new RTCSessionDescription(signal.sdp))
                     .then(() => {
+                        console.log("✅ Remote description set for", fromId);
+                        
                         // Process any queued ICE candidates
                         if (iceCandidateQueue[fromId]) {
                             console.log(
@@ -442,6 +453,7 @@ function VideoMeetComponent() {
                         }
 
                         if (signal.sdp.type === "offer") {
+                            console.log("📤 Creating answer for", fromId);
                             connections[fromId]
                                 .createAnswer()
                                 .then((description) => {
@@ -455,6 +467,7 @@ function VideoMeetComponent() {
                                                     sdp: connections[fromId].localDescription,
                                                 })
                                             );
+                                            console.log("✅ Answer sent to", fromId);
                                         })
                                         .catch((e) =>
                                             console.error("Error setting local description:", e)
@@ -463,7 +476,7 @@ function VideoMeetComponent() {
                                 .catch((e) => console.error("Error creating answer:", e));
                         }
                     })
-                    .catch((e) => console.error("Error setting remote description:", e));
+                    .catch((e) => console.error("❌ Error setting remote description:", e));
             }
 
             if (signal.ice) {
@@ -708,47 +721,33 @@ function VideoMeetComponent() {
                     }
                 });
 
-                if (id === socketIdRef.current) {
-                    console.log("Initiating offers to all peers");
-                    for (let id2 in connections) {
-                        if (id2 === socketIdRef.current) continue;
-
-                        try {
-                            if (window.localStream) {
-                                // Add tracks using modern API
-                                window.localStream.getTracks().forEach((track) => {
-                                    const senders = connections[id2].getSenders();
-                                    const alreadyAdded = senders.find((s) => s.track === track);
-                                    if (!alreadyAdded) {
-                                        connections[id2].addTrack(track, window.localStream);
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            console.error("Error adding stream to peer:", e);
-                        }
-
-                        connections[id2]
-                            .createOffer()
-                            .then((description) => {
-                                connections[id2]
-                                    .setLocalDescription(description)
-                                    .then(() => {
-                                        socketRef.current.emit(
-                                            "signal",
-                                            id2,
-                                            JSON.stringify({
-                                                sdp: connections[id2].localDescription,
-                                            })
-                                        );
-                                    })
-                                    .catch((e) =>
-                                        console.error("Error setting local description:", e)
+                // After creating the peer connection, initiate the offer
+                console.log("🤝 Creating offer for peer:", socketListToProcess);
+                
+                socketListToProcess.forEach((peerSocketId) => {
+                    if (connections[peerSocketId]) {
+                        // Create and send offer
+                        setTimeout(() => {
+                            console.log("📤 Sending offer to:", peerSocketId);
+                            connections[peerSocketId]
+                                .createOffer()
+                                .then((description) => {
+                                    return connections[peerSocketId].setLocalDescription(description);
+                                })
+                                .then(() => {
+                                    socketRef.current.emit(
+                                        "signal",
+                                        peerSocketId,
+                                        JSON.stringify({
+                                            sdp: connections[peerSocketId].localDescription,
+                                        })
                                     );
-                            })
-                            .catch((e) => console.error("Error creating offer:", e));
+                                    console.log("✅ Offer sent to:", peerSocketId);
+                                })
+                                .catch((e) => console.error("❌ Error creating/sending offer:", e));
+                        }, 100); // Small delay to ensure connection is fully set up
                     }
-                }
+                });
             });
         });
     };
