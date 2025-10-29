@@ -27,46 +27,60 @@ var iceCandidateQueue = {}; // Queue for ICE candidates received before remote d
 
 const peerConfigConnections = {
     iceServers: [
-        // Google's public STUN servers
+        // STUN servers for NAT discovery
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        // Twilio STUN servers
         { urls: "stun:global.stun.twilio.com:3478" },
-        // Free TURN servers - these relay traffic when direct connection fails
+        // Multiple TURN servers for reliable relaying
         {
-            urls: "turn:openrelay.metered.ca:80",
+            urls: [
+                "turn:openrelay.metered.ca:80",
+                "turn:openrelay.metered.ca:443",
+                "turn:openrelay.metered.ca:443?transport=tcp"
+            ],
             username: "openrelayproject",
             credential: "openrelayproject",
         },
         {
-            urls: "turn:openrelay.metered.ca:443",
+            urls: [
+                "turn:relay.metered.ca:80",
+                "turn:relay.metered.ca:443",
+                "turn:relay.metered.ca:443?transport=tcp"
+            ],
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        // Numb TURN server (additional backup)
+        {
+            urls: "turn:numb.viagenie.ca",
+            username: "webrtc@live.com",
+            credential: "muazkh",
+        },
+        // Metered.ca TURN servers
+        {
+            urls: "turn:a.relay.metered.ca:80",
             username: "openrelayproject",
             credential: "openrelayproject",
         },
         {
-            urls: "turn:openrelay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        // Additional reliable TURN servers
-        {
-            urls: "turn:relay.metered.ca:80",
+            urls: "turn:a.relay.metered.ca:80?transport=tcp",
             username: "openrelayproject",
             credential: "openrelayproject",
         },
         {
-            urls: "turn:relay.metered.ca:443",
+            urls: "turn:a.relay.metered.ca:443",
             username: "openrelayproject",
             credential: "openrelayproject",
         },
         {
-            urls: "turn:relay.metered.ca:443?transport=tcp",
+            urls: "turn:a.relay.metered.ca:443?transport=tcp",
             username: "openrelayproject",
             credential: "openrelayproject",
         },
     ],
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: "all", // Try all connection types (relay + direct)
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
 };
 
 function VideoMeetComponent() {
@@ -585,8 +599,21 @@ function VideoMeetComponent() {
                         const state = connections[socketListId].connectionState;
                         console.log(`Connection state for ${socketListId}:`, state);
                         
-                        if (state === "failed" || state === "disconnected" || state === "closed") {
-                            console.error(`❌ Connection ${state} for ${socketListId}`);
+                        if (state === "failed") {
+                            console.error(`❌ Connection FAILED for ${socketListId}`);
+                            console.error("💡 Possible reasons:");
+                            console.error("   1. Both devices behind strict NAT/firewall");
+                            console.error("   2. TURN servers not accessible");
+                            console.error("   3. Network blocking WebRTC traffic");
+                            
+                            // Try to restart ICE
+                            console.log("🔄 Attempting ICE restart...");
+                            if (connections[socketListId]) {
+                                connections[socketListId].restartIce();
+                            }
+                        }
+                        if (state === "disconnected") {
+                            console.warn(`⚠️  Connection disconnected for ${socketListId}`);
                         }
                         if (state === "connected") {
                             console.log(`✅ Successfully connected to ${socketListId}`);
@@ -773,13 +800,28 @@ function VideoMeetComponent() {
                     
                     setTimeout(() => {
                         if (connections[id]) {
-                            console.log("📤 Sending offer to:", id);
+                            console.log("📤 Creating offer for:", id);
+                            
+                            // Verify tracks are added
+                            const senders = connections[id].getSenders();
+                            console.log("   - Tracks in connection:", senders.length);
+                            senders.forEach(sender => {
+                                if (sender.track) {
+                                    console.log("   - Track:", sender.track.kind, "enabled:", sender.track.enabled);
+                                }
+                            });
+                            
                             connections[id]
-                                .createOffer()
+                                .createOffer({
+                                    offerToReceiveAudio: true,
+                                    offerToReceiveVideo: true,
+                                })
                                 .then((description) => {
+                                    console.log("   - Offer created, setting local description");
                                     return connections[id].setLocalDescription(description);
                                 })
                                 .then(() => {
+                                    console.log("   - Local description set, sending offer");
                                     socketRef.current.emit(
                                         "signal",
                                         id,
@@ -790,8 +832,10 @@ function VideoMeetComponent() {
                                     console.log("✅ Offer sent to:", id);
                                 })
                                 .catch((e) => console.error("❌ Error creating/sending offer:", e));
+                        } else {
+                            console.error("❌ No connection found for:", id);
                         }
-                    }, 100);
+                    }, 500); // Increased delay to ensure tracks are added
                 } else {
                     // We just joined - existing users will send us offers, we'll respond with answers
                     console.log("⏳ We are new user, waiting for offers from existing users");
