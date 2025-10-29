@@ -30,57 +30,17 @@ const peerConfigConnections = {
         // STUN servers for NAT discovery
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:global.stun.twilio.com:3478" },
-        // Multiple TURN servers for reliable relaying
+        // YOUR OWN TURN SERVER - This will make cross-network connections work!
         {
-            urls: [
-                "turn:openrelay.metered.ca:80",
-                "turn:openrelay.metered.ca:443",
-                "turn:openrelay.metered.ca:443?transport=tcp"
-            ],
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: [
-                "turn:relay.metered.ca:80",
-                "turn:relay.metered.ca:443",
-                "turn:relay.metered.ca:443?transport=tcp"
-            ],
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        // Numb TURN server (additional backup)
-        {
-            urls: "turn:numb.viagenie.ca",
-            username: "webrtc@live.com",
-            credential: "muazkh",
-        },
-        // Metered.ca TURN servers
-        {
-            urls: "turn:a.relay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:a.relay.metered.ca:80?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:a.relay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-        },
-        {
-            urls: "turn:a.relay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject",
+            urls: ["turn:139.59.67.205:3478", "turn:139.59.67.205:3478?transport=tcp"],
+            username: "dhanyabad",
+            credential: "secure123pass",
         },
     ],
     iceCandidatePoolSize: 10,
     bundlePolicy: "max-bundle",
     rtcpMuxPolicy: "require",
+    iceTransportPolicy: "all", // Use both direct and relay connections
 };
 
 function VideoMeetComponent() {
@@ -456,17 +416,17 @@ function VideoMeetComponent() {
         if (fromId !== socketIdRef.current) {
             if (signal.sdp) {
                 console.log("📝 Processing SDP", signal.sdp.type, "from", fromId);
-                
+
                 if (!connections[fromId]) {
                     console.error("❌ No connection exists for", fromId);
                     return;
                 }
-                
+
                 connections[fromId]
                     .setRemoteDescription(new RTCSessionDescription(signal.sdp))
                     .then(() => {
                         console.log("✅ Remote description set for", fromId);
-                        
+
                         // Process any queued ICE candidates
                         if (iceCandidateQueue[fromId]) {
                             console.log(
@@ -598,14 +558,14 @@ function VideoMeetComponent() {
                     connections[socketListId].onconnectionstatechange = () => {
                         const state = connections[socketListId].connectionState;
                         console.log(`Connection state for ${socketListId}:`, state);
-                        
+
                         if (state === "failed") {
                             console.error(`❌ Connection FAILED for ${socketListId}`);
                             console.error("💡 Possible reasons:");
                             console.error("   1. Both devices behind strict NAT/firewall");
                             console.error("   2. TURN servers not accessible");
                             console.error("   3. Network blocking WebRTC traffic");
-                            
+
                             // Try to restart ICE
                             console.log("🔄 Attempting ICE restart...");
                             if (connections[socketListId]) {
@@ -623,26 +583,43 @@ function VideoMeetComponent() {
                     connections[socketListId].oniceconnectionstatechange = () => {
                         const iceState = connections[socketListId].iceConnectionState;
                         console.log(`ICE connection state for ${socketListId}:`, iceState);
-                        
+
                         if (iceState === "failed") {
-                            console.error(`❌ ICE connection failed for ${socketListId} - Check firewall/TURN servers`);
+                            console.error(
+                                `❌ ICE connection failed for ${socketListId} - Check firewall/TURN servers`
+                            );
                         }
                         if (iceState === "connected" || iceState === "completed") {
                             console.log(`✅ ICE connection established for ${socketListId}`);
-                            
+
                             // Get connection statistics
-                            connections[socketListId].getStats().then(stats => {
-                                stats.forEach(report => {
-                                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                                        console.log("🔗 Active connection type:", report);
-                                        console.log("   - Local candidate type:", report.localCandidateId);
-                                        console.log("   - Remote candidate type:", report.remoteCandidateId);
-                                    }
-                                    if (report.type === 'local-candidate' && report.candidateType === 'relay') {
-                                        console.log("🔄 TURN relay is being used!");
-                                    }
-                                });
-                            }).catch(e => console.error("Error getting stats:", e));
+                            connections[socketListId]
+                                .getStats()
+                                .then((stats) => {
+                                    stats.forEach((report) => {
+                                        if (
+                                            report.type === "candidate-pair" &&
+                                            report.state === "succeeded"
+                                        ) {
+                                            console.log("🔗 Active connection type:", report);
+                                            console.log(
+                                                "   - Local candidate type:",
+                                                report.localCandidateId
+                                            );
+                                            console.log(
+                                                "   - Remote candidate type:",
+                                                report.remoteCandidateId
+                                            );
+                                        }
+                                        if (
+                                            report.type === "local-candidate" &&
+                                            report.candidateType === "relay"
+                                        ) {
+                                            console.log("🔄 TURN relay is being used!");
+                                        }
+                                    });
+                                })
+                                .catch((e) => console.error("Error getting stats:", e));
                         }
                     };
 
@@ -662,16 +639,18 @@ function VideoMeetComponent() {
                             console.log("   - Type:", candidate.type); // host, srflx (STUN), or relay (TURN)
                             console.log("   - Protocol:", candidate.protocol);
                             console.log("   - Address:", candidate.address);
-                            
+
                             // Log if TURN server is being used
                             if (candidate.type === "relay") {
-                                console.log("🔄 Using TURN relay server (good for different networks!)");
+                                console.log(
+                                    "🔄 Using TURN relay server (good for different networks!)"
+                                );
                             } else if (candidate.type === "srflx") {
                                 console.log("🌐 Using STUN server reflexive candidate");
                             } else if (candidate.type === "host") {
                                 console.log("🏠 Using local host candidate");
                             }
-                            
+
                             socketRef.current.emit(
                                 "signal",
                                 socketListId,
@@ -793,24 +772,29 @@ function VideoMeetComponent() {
                 // Offer/Answer logic: Only the EXISTING user creates the offer
                 // When id !== socketIdRef.current, it means another user joined, so WE create the offer
                 // When id === socketIdRef.current, we just joined, so we wait for offers from existing users
-                
+
                 if (id !== socketIdRef.current) {
                     // Another user joined - WE should create and send offer to them
                     console.log("🤝 We are existing user, creating offer for new user:", id);
-                    
+
                     setTimeout(() => {
                         if (connections[id]) {
                             console.log("📤 Creating offer for:", id);
-                            
+
                             // Verify tracks are added
                             const senders = connections[id].getSenders();
                             console.log("   - Tracks in connection:", senders.length);
-                            senders.forEach(sender => {
+                            senders.forEach((sender) => {
                                 if (sender.track) {
-                                    console.log("   - Track:", sender.track.kind, "enabled:", sender.track.enabled);
+                                    console.log(
+                                        "   - Track:",
+                                        sender.track.kind,
+                                        "enabled:",
+                                        sender.track.enabled
+                                    );
                                 }
                             });
-                            
+
                             connections[id]
                                 .createOffer({
                                     offerToReceiveAudio: true,
@@ -949,7 +933,11 @@ function VideoMeetComponent() {
     };
 
     return (
-        <div className={`${styles.meetVideoContainer} ${darkMode ? styles.darkMode : styles.lightMode}`}>
+        <div
+            className={`${styles.meetVideoContainer} ${
+                darkMode ? styles.darkMode : styles.lightMode
+            }`}
+        >
             {/* Dark Mode Toggle */}
             <button
                 className={styles.darkModeToggle}
