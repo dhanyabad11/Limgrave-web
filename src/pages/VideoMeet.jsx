@@ -30,10 +30,9 @@ const peerConfigConnections = {
         // Google's public STUN servers
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        // OpenRelay free TURN server
+        // Twilio STUN servers
+        { urls: "stun:global.stun.twilio.com:3478" },
+        // Free TURN servers - these relay traffic when direct connection fails
         {
             urls: "turn:openrelay.metered.ca:80",
             username: "openrelayproject",
@@ -49,8 +48,25 @@ const peerConfigConnections = {
             username: "openrelayproject",
             credential: "openrelayproject",
         },
+        // Additional reliable TURN servers
+        {
+            urls: "turn:relay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:relay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
+        {
+            urls: "turn:relay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
     ],
     iceCandidatePoolSize: 10,
+    iceTransportPolicy: "all", // Try all connection types (relay + direct)
 };
 
 function VideoMeetComponent() {
@@ -586,6 +602,20 @@ function VideoMeetComponent() {
                         }
                         if (iceState === "connected" || iceState === "completed") {
                             console.log(`✅ ICE connection established for ${socketListId}`);
+                            
+                            // Get connection statistics
+                            connections[socketListId].getStats().then(stats => {
+                                stats.forEach(report => {
+                                    if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                                        console.log("🔗 Active connection type:", report);
+                                        console.log("   - Local candidate type:", report.localCandidateId);
+                                        console.log("   - Remote candidate type:", report.remoteCandidateId);
+                                    }
+                                    if (report.type === 'local-candidate' && report.candidateType === 'relay') {
+                                        console.log("🔄 TURN relay is being used!");
+                                    }
+                                });
+                            }).catch(e => console.error("Error getting stats:", e));
                         }
                     };
 
@@ -600,13 +630,25 @@ function VideoMeetComponent() {
                     // Wait for their ice candidate
                     connections[socketListId].onicecandidate = function (event) {
                         if (event.candidate != null) {
+                            const candidate = event.candidate;
                             console.log("📤 Sending ICE candidate to:", socketListId);
-                            console.log("   - Type:", event.candidate.type);
-                            console.log("   - Protocol:", event.candidate.protocol);
+                            console.log("   - Type:", candidate.type); // host, srflx (STUN), or relay (TURN)
+                            console.log("   - Protocol:", candidate.protocol);
+                            console.log("   - Address:", candidate.address);
+                            
+                            // Log if TURN server is being used
+                            if (candidate.type === "relay") {
+                                console.log("🔄 Using TURN relay server (good for different networks!)");
+                            } else if (candidate.type === "srflx") {
+                                console.log("🌐 Using STUN server reflexive candidate");
+                            } else if (candidate.type === "host") {
+                                console.log("🏠 Using local host candidate");
+                            }
+                            
                             socketRef.current.emit(
                                 "signal",
                                 socketListId,
-                                JSON.stringify({ ice: event.candidate })
+                                JSON.stringify({ ice: candidate })
                             );
                         } else {
                             console.log("✅ All ICE candidates sent for:", socketListId);
@@ -721,33 +763,39 @@ function VideoMeetComponent() {
                     }
                 });
 
-                // After creating the peer connection, initiate the offer
-                console.log("🤝 Creating offer for peer:", socketListToProcess);
+                // Offer/Answer logic: Only the EXISTING user creates the offer
+                // When id !== socketIdRef.current, it means another user joined, so WE create the offer
+                // When id === socketIdRef.current, we just joined, so we wait for offers from existing users
                 
-                socketListToProcess.forEach((peerSocketId) => {
-                    if (connections[peerSocketId]) {
-                        // Create and send offer
-                        setTimeout(() => {
-                            console.log("📤 Sending offer to:", peerSocketId);
-                            connections[peerSocketId]
+                if (id !== socketIdRef.current) {
+                    // Another user joined - WE should create and send offer to them
+                    console.log("🤝 We are existing user, creating offer for new user:", id);
+                    
+                    setTimeout(() => {
+                        if (connections[id]) {
+                            console.log("📤 Sending offer to:", id);
+                            connections[id]
                                 .createOffer()
                                 .then((description) => {
-                                    return connections[peerSocketId].setLocalDescription(description);
+                                    return connections[id].setLocalDescription(description);
                                 })
                                 .then(() => {
                                     socketRef.current.emit(
                                         "signal",
-                                        peerSocketId,
+                                        id,
                                         JSON.stringify({
-                                            sdp: connections[peerSocketId].localDescription,
+                                            sdp: connections[id].localDescription,
                                         })
                                     );
-                                    console.log("✅ Offer sent to:", peerSocketId);
+                                    console.log("✅ Offer sent to:", id);
                                 })
                                 .catch((e) => console.error("❌ Error creating/sending offer:", e));
-                        }, 100); // Small delay to ensure connection is fully set up
-                    }
-                });
+                        }
+                    }, 100);
+                } else {
+                    // We just joined - existing users will send us offers, we'll respond with answers
+                    console.log("⏳ We are new user, waiting for offers from existing users");
+                }
             });
         });
     };
