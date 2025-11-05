@@ -233,27 +233,36 @@ function VideoMeetComponent() {
         for (let id in connections) {
             if (id === socketIdRef.current) continue;
 
-            console.log("🔄 Adding local tracks to peer:", id);
+            console.log("🔄 Updating tracks for peer:", id);
 
-            // Use modern addTrack API
-            stream.getTracks().forEach((track) => {
-                console.log(`   - Adding ${track.kind} track to ${id}`);
-                connections[id].addTrack(track, stream);
-            });
-
-            connections[id].createOffer().then((description) => {
-                console.log(description);
-                connections[id]
-                    .setLocalDescription(description)
-                    .then(() => {
-                        socketRef.current.emit(
-                            "signal",
-                            id,
-                            JSON.stringify({ sdp: connections[id].localDescription })
-                        );
-                    })
-                    .catch((e) => console.log(e));
-            });
+            // Get all senders
+            const senders = connections[id].getSenders();
+            
+            // Replace or add video track
+            const videoTrack = stream.getVideoTracks()[0];
+            const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
+            
+            if (videoSender && videoTrack) {
+                videoSender.replaceTrack(videoTrack)
+                    .then(() => console.log("✅ Video track replaced for", id))
+                    .catch((e) => console.error("❌ Error replacing video track:", e));
+            } else if (!videoSender && videoTrack) {
+                connections[id].addTrack(videoTrack, stream);
+                console.log("➕ Video track added for", id);
+            }
+            
+            // Replace or add audio track
+            const audioTrack = stream.getAudioTracks()[0];
+            const audioSender = senders.find(sender => sender.track && sender.track.kind === 'audio');
+            
+            if (audioSender && audioTrack) {
+                audioSender.replaceTrack(audioTrack)
+                    .then(() => console.log("✅ Audio track replaced for", id))
+                    .catch((e) => console.error("❌ Error replacing audio track:", e));
+            } else if (!audioSender && audioTrack) {
+                connections[id].addTrack(audioTrack, stream);
+                console.log("➕ Audio track added for", id);
+            }
         }
 
         stream.getTracks().forEach(
@@ -274,22 +283,15 @@ function VideoMeetComponent() {
                     localVideoref.current.srcObject = window.localStream;
 
                     for (let id in connections) {
-                        // Use modern addTrack API
+                        const senders = connections[id].getSenders();
+                        
                         window.localStream.getTracks().forEach((track) => {
-                            connections[id].addTrack(track, window.localStream);
-                        });
-
-                        connections[id].createOffer().then((description) => {
-                            connections[id]
-                                .setLocalDescription(description)
-                                .then(() => {
-                                    socketRef.current.emit(
-                                        "signal",
-                                        id,
-                                        JSON.stringify({ sdp: connections[id].localDescription })
-                                    );
-                                })
-                                .catch((e) => console.log(e));
+                            const sender = senders.find(s => s.track && s.track.kind === track.kind);
+                            if (sender) {
+                                sender.replaceTrack(track);
+                            } else {
+                                connections[id].addTrack(track, window.localStream);
+                            }
                         });
                     }
                 })
@@ -355,7 +357,7 @@ function VideoMeetComponent() {
     };
 
     const getDislayMediaSuccess = (stream) => {
-        console.log("HERE");
+        console.log("🖥️ Screen sharing started");
         try {
             window.localStream.getTracks().forEach((track) => track.stop());
         } catch (e) {
@@ -368,28 +370,40 @@ function VideoMeetComponent() {
         for (let id in connections) {
             if (id === socketIdRef.current) continue;
 
-            // Use modern addTrack API
-            stream.getTracks().forEach((track) => {
-                connections[id].addTrack(track, stream);
-            });
-
-            connections[id].createOffer().then((description) => {
-                connections[id]
-                    .setLocalDescription(description)
+            console.log("🔄 Replacing tracks with screen share for peer:", id);
+            
+            // Get all senders
+            const senders = connections[id].getSenders();
+            
+            // Replace video track with screen share track
+            const screenVideoTrack = stream.getVideoTracks()[0];
+            const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
+            
+            if (videoSender && screenVideoTrack) {
+                videoSender.replaceTrack(screenVideoTrack)
                     .then(() => {
-                        socketRef.current.emit(
-                            "signal",
-                            id,
-                            JSON.stringify({ sdp: connections[id].localDescription })
-                        );
+                        console.log("✅ Video track replaced with screen share for", id);
                     })
-                    .catch((e) => console.log(e));
-            });
+                    .catch((e) => console.error("❌ Error replacing video track:", e));
+            }
+            
+            // Replace audio track if screen share has audio
+            const screenAudioTrack = stream.getAudioTracks()[0];
+            const audioSender = senders.find(sender => sender.track && sender.track.kind === 'audio');
+            
+            if (audioSender && screenAudioTrack) {
+                audioSender.replaceTrack(screenAudioTrack)
+                    .then(() => {
+                        console.log("✅ Audio track replaced with screen share audio for", id);
+                    })
+                    .catch((e) => console.error("❌ Error replacing audio track:", e));
+            }
         }
 
         stream.getTracks().forEach(
             (track) =>
                 (track.onended = () => {
+                    console.log("🛑 Screen sharing stopped");
                     setScreen(false);
 
                     try {
@@ -399,10 +413,7 @@ function VideoMeetComponent() {
                         console.log(e);
                     }
 
-                    let blackSilence = (...args) => new MediaStream([black(...args), silence()]);
-                    window.localStream = blackSilence();
-                    localVideoref.current.srcObject = window.localStream;
-
+                    // Switch back to camera
                     getUserMedia();
                 })
         );
