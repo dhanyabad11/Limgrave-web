@@ -237,26 +237,32 @@ function VideoMeetComponent() {
 
             // Get all senders
             const senders = connections[id].getSenders();
-            
+
             // Replace or add video track
             const videoTrack = stream.getVideoTracks()[0];
-            const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
-            
+            const videoSender = senders.find(
+                (sender) => sender.track && sender.track.kind === "video"
+            );
+
             if (videoSender && videoTrack) {
-                videoSender.replaceTrack(videoTrack)
+                videoSender
+                    .replaceTrack(videoTrack)
                     .then(() => console.log("✅ Video track replaced for", id))
                     .catch((e) => console.error("❌ Error replacing video track:", e));
             } else if (!videoSender && videoTrack) {
                 connections[id].addTrack(videoTrack, stream);
                 console.log("➕ Video track added for", id);
             }
-            
+
             // Replace or add audio track
             const audioTrack = stream.getAudioTracks()[0];
-            const audioSender = senders.find(sender => sender.track && sender.track.kind === 'audio');
-            
+            const audioSender = senders.find(
+                (sender) => sender.track && sender.track.kind === "audio"
+            );
+
             if (audioSender && audioTrack) {
-                audioSender.replaceTrack(audioTrack)
+                audioSender
+                    .replaceTrack(audioTrack)
                     .then(() => console.log("✅ Audio track replaced for", id))
                     .catch((e) => console.error("❌ Error replacing audio track:", e));
             } else if (!audioSender && audioTrack) {
@@ -284,9 +290,11 @@ function VideoMeetComponent() {
 
                     for (let id in connections) {
                         const senders = connections[id].getSenders();
-                        
+
                         window.localStream.getTracks().forEach((track) => {
-                            const sender = senders.find(s => s.track && s.track.kind === track.kind);
+                            const sender = senders.find(
+                                (s) => s.track && s.track.kind === track.kind
+                            );
                             if (sender) {
                                 sender.replaceTrack(track);
                             } else {
@@ -371,28 +379,34 @@ function VideoMeetComponent() {
             if (id === socketIdRef.current) continue;
 
             console.log("🔄 Replacing tracks with screen share for peer:", id);
-            
+
             // Get all senders
             const senders = connections[id].getSenders();
-            
+
             // Replace video track with screen share track
             const screenVideoTrack = stream.getVideoTracks()[0];
-            const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
-            
+            const videoSender = senders.find(
+                (sender) => sender.track && sender.track.kind === "video"
+            );
+
             if (videoSender && screenVideoTrack) {
-                videoSender.replaceTrack(screenVideoTrack)
+                videoSender
+                    .replaceTrack(screenVideoTrack)
                     .then(() => {
                         console.log("✅ Video track replaced with screen share for", id);
                     })
                     .catch((e) => console.error("❌ Error replacing video track:", e));
             }
-            
+
             // Replace audio track if screen share has audio
             const screenAudioTrack = stream.getAudioTracks()[0];
-            const audioSender = senders.find(sender => sender.track && sender.track.kind === 'audio');
-            
+            const audioSender = senders.find(
+                (sender) => sender.track && sender.track.kind === "audio"
+            );
+
             if (audioSender && screenAudioTrack) {
-                audioSender.replaceTrack(screenAudioTrack)
+                audioSender
+                    .replaceTrack(screenAudioTrack)
                     .then(() => {
                         console.log("✅ Audio track replaced with screen share audio for", id);
                     })
